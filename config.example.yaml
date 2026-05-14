@@ -1,0 +1,24 @@
+# logpipe configuration example
+# Copy to config.yaml and adjust to your environment.
+
+sources:
+  # Tail a local application log file
+  - path: /var/log/myapp/app.log
+    label: myapp
+
+  # Tail a second service log
+  - path: /var/log/nginx/access.log
+    label: nginx
+
+sinks:
+  # Print parsed JSON logs to stdout (useful for debugging)
+  - name: console
+    type: stdout
+
+  # Forward logs to a remote HTTP endpoint
+  - name: remote
+    type: http
+    url: https://logs.example.com/ingest
+    headers:
+      Authorization: "Bearer YOUR_TOKEN_HERE"
+      Content-Type: "application/json"
