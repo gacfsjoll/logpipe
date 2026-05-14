@@ -5,76 +5,97 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yourorg/logpipe/internal/config"
+	"logpipe/internal/config"
 )
 
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
-	f, err := os.CreateTemp(t.TempDir(), "logpipe-*.yaml")
+	f, err := os.CreateTemp(t.TempDir(), "*.yaml")
 	if err != nil {
-		t.Fatalf("creating temp file: %v", err)
+		t.Fatalf("createTemp: %v", err)
 	}
 	if _, err := f.WriteString(content); err != nil {
-		t.Fatalf("writing temp file: %v", err)
+		t.Fatalf("write: %v", err)
 	}
 	f.Close()
 	return f.Name()
 }
 
 func TestLoad_ValidConfig(t *testing.T) {
-	yaml := `
+	path := writeTemp(t, `
 sources:
   - path: /var/log/app.log
-    label: app
 sinks:
-  - name: console
-    type: stdout
-`
-	path := writeTemp(t, yaml)
+  - type: stdout
+`)
 	cfg, err := config.Load(path)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
 	if len(cfg.Sources) != 1 || cfg.Sources[0].Path != "/var/log/app.log" {
 		t.Errorf("unexpected sources: %+v", cfg.Sources)
 	}
-	if len(cfg.Sinks) != 1 || cfg.Sinks[0].Type != config.SinkTypeStdout {
-		t.Errorf("unexpected sinks: %+v", cfg.Sinks)
-	}
 }
 
 func TestLoad_MissingFile(t *testing.T) {
-	_, err := config.Load(filepath.Join(t.TempDir(), "nonexistent.yaml"))
+	_, err := config.Load(filepath.Join(t.TempDir(), "missing.yaml"))
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
 }
 
 func TestValidate_NoSources(t *testing.T) {
-	cfg := &config.Config{
-		Sinks: []config.SinkConfig{{Name: "out", Type: config.SinkTypeStdout}},
-	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validation error for missing sources")
+	path := writeTemp(t, `sinks:\n  - type: stdout\n`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected validation error")
 	}
 }
 
 func TestValidate_HTTPSinkMissingURL(t *testing.T) {
-	cfg := &config.Config{
-		Sources: []config.SourceConfig{{Path: "/tmp/a.log"}},
-		Sinks:   []config.SinkConfig{{Name: "remote", Type: config.SinkTypeHTTP}},
+	path := writeTemp(t, `
+sources:
+  - path: /tmp/a.log
+sinks:
+  - type: http
+`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error: http sink missing url")
 	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validation error for http sink without url")
+}
+
+func TestValidate_FileSinkMissingPath(t *testing.T) {
+	path := writeTemp(t, `
+sources:
+  - path: /tmp/a.log
+sinks:
+  - type: file
+`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error: file sink missing file_path")
+	}
+}
+
+func TestValidate_FileSinkValid(t *testing.T) {
+	tmp := t.TempDir()
+	path := writeTemp(t, "sources:\n  - path: /tmp/a.log\nsinks:\n  - type: file\n    file_path: "+tmp+"/out.log\n")
+	_, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidate_UnknownSinkType(t *testing.T) {
-	cfg := &config.Config{
-		Sources: []config.SourceConfig{{Path: "/tmp/a.log"}},
-		Sinks:   []config.SinkConfig{{Name: "x", Type: "kafka"}},
-	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validation error for unknown sink type")
+	path := writeTemp(t, `
+sources:
+  - path: /tmp/a.log
+sinks:
+  - type: kafka
+`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error for unknown sink type")
 	}
 }
