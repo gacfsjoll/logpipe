@@ -15,9 +15,9 @@ import (
 
 // Pipeline coordinates all components for a given configuration.
 type Pipeline struct {
-	cfg     *config.Config
-	sinks   []sink.Sink
-	wg      sync.WaitGroup
+	cfg   *config.Config
+	sinks []sink.Sink
+	wg    sync.WaitGroup
 }
 
 // New creates a Pipeline from the provided configuration.
@@ -70,11 +70,18 @@ func (p *Pipeline) tailSource(ctx context.Context, src config.Source) {
 				log.Printf("pipeline: parse error (%s): %v", src.Path, err)
 				continue
 			}
-			for _, s := range p.sinks {
-				if werr := s.Write(ctx, entry); werr != nil {
-					log.Printf("pipeline: sink write error: %v", werr)
-				}
-			}
+			p.writeToSinks(ctx, entry)
+		}
+	}
+}
+
+// writeToSinks forwards a parsed log entry to all configured sinks.
+// Errors from individual sinks are logged but do not stop delivery to
+// the remaining sinks.
+func (p *Pipeline) writeToSinks(ctx context.Context, entry parser.Entry) {
+	for _, s := range p.sinks {
+		if err := s.Write(ctx, entry); err != nil {
+			log.Printf("pipeline: sink write error: %v", err)
 		}
 	}
 }
