@@ -101,3 +101,16 @@ func TestFileSink_InvalidPath(t *testing.T) {
 		t.Fatal("expected error for invalid path")
 	}
 }
+
+func TestFileSink_Write_AfterClose(t *testing.T) {
+	tmp := t.TempDir()
+	s, err := sink.NewFileSink(tmp + "/closed.log")
+	if err != nil {
+		t.Fatalf("NewFileSink: %v", err)
+	}
+	s.Close()
+
+	if err := s.Write(sampleFileEntry()); err == nil {
+		t.Fatal("expected error when writing to closed sink")
+	}
+}
