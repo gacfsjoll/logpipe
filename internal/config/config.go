@@ -1,82 +1,80 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
 
-// SinkType enumerates the supported output sink kinds.
-type SinkType string
-
-const (
-	SinkHTTP   SinkType = "http"
-	SinkStdout SinkType = "stdout"
-	SinkFile   SinkType = "file"
-)
-
-// Source describes a log file to tail.
-type Source struct {
+// SourceConfig describes a single log file source.
+type SourceConfig struct {
 	Path string `yaml:"path"`
+	Tag  string `yaml:"tag"`
 }
 
-// Sink describes an output destination for parsed log entries.
-type Sink struct {
-	Type    SinkType          `yaml:"type"`
+// SinkConfig describes a single log destination.
+type SinkConfig struct {
+	Type    string            `yaml:"type"`
 	URL     string            `yaml:"url,omitempty"`
+	Path    string            `yaml:"path,omitempty"`
 	Headers map[string]string `yaml:"headers,omitempty"`
-	// FilePath is used when Type == SinkFile.
-	FilePath string `yaml:"file_path,omitempty"`
 }
 
-// Config is the top-level application configuration.
+// Config is the top-level configuration structure.
 type Config struct {
-	Sources []Source `yaml:"sources"`
-	Sinks   []Sink   `yaml:"sinks"`
+	Sources []SourceConfig `yaml:"sources"`
+	Sinks   []SinkConfig   `yaml:"sinks"`
 }
 
 // Load reads and parses a YAML config file from the given path.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("config: read %q: %w", path, err)
+		return nil, fmt.Errorf("reading config file: %w", err)
 	}
+
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("config: parse: %w", err)
+		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
+
+	if err := Validate(&cfg); err != nil {
 		return nil, err
 	}
+
 	return &cfg, nil
 }
 
-// Validate checks that the configuration is semantically valid.
-func (c *Config) Validate() error {
-	if len(c.Sources) == 0 {
-		return errors.New("config: at least one source is required")
+// Validate checks that a Config has the required fields populated.
+func Validate(cfg *Config) error {
+	if len(cfg.Sources) == 0 {
+		return fmt.Errorf("config must define at least one source")
 	}
-	for i, src := range c.Sources {
+	for i, src := range cfg.Sources {
 		if src.Path == "" {
-			return fmt.Errorf("config: source[%d]: path is required", i)
+			return fmt.Errorf("source[%d]: path is required", i)
 		}
 	}
-	for i, snk := range c.Sinks {
-		switch snk.Type {
-		case SinkHTTP:
-			if snk.URL == "" {
-				return fmt.Errorf("config: sink[%d]: url is required for http sink", i)
+	if len(cfg.Sinks) == 0 {
+		return fmt.Errorf("config must define at least one sink")
+	}
+	for i, s := range cfg.Sinks {
+		switch s.Type {
+		case "http":
+			if s.URL == "" {
+				return fmt.Errorf("sink[%d]: http sink requires a url", i)
 			}
-		case SinkFile:
-			if snk.FilePath == "" {
-				return fmt.Errorf("config: sink[%d]: file_path is required for file sink", i)
+		case "file":
+			if s.Path == "" {
+				return fmt.Errorf("sink[%d]: file sink requires a path", i)
 			}
-		case SinkStdout:
-			// no extra fields required
+		case "stdout":
+			// no additional fields required
+		case "":
+			return fmt.Errorf("sink[%d]: type is required", i)
 		default:
-			return fmt.Errorf("config: sink[%d]: unknown type %q", i, snk.Type)
+			return fmt.Errorf("sink[%d]: unknown type %q", i, s.Type)
 		}
 	}
 	return nil
