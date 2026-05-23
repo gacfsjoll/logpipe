@@ -45,6 +45,13 @@ func (c *Checker) Register(name string, fn func() (bool, string)) {
 	c.checks[name] = fn
 }
 
+// Deregister removes a named check. It is a no-op if the name is not found.
+func (c *Checker) Deregister(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.checks, name)
+}
+
 // Run evaluates all registered checks and returns a Report.
 func (c *Checker) Run() Report {
 	c.mu.RLock()
