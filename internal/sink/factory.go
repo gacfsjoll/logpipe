@@ -1,53 +1,59 @@
 package sink
 
 import (
+	"errors"
 	"fmt"
 
 	"logpipe/internal/config"
 )
 
-// Sink is the interface that all log sinks must implement.
+// Sink is the common interface every output adapter must satisfy.
 type Sink interface {
-	Write(entry map[string]any) error
+	Write(entry interface{ GetFields() map[string]any }) error
 }
 
-// FromConfig constructs a Sink from a sink configuration block.
-// Supported types: "http", "stdout", "file".
-func FromConfig(cfg config.SinkConfig) (Sink, error) {
+// FromConfig constructs a single Sink from a SinkConfig.
+func FromConfig(cfg config.SinkConfig) (interface{ Write(e interface{ GetFields() map[string]any }) error }, error) {
 	switch cfg.Type {
-	case "http":
-		if cfg.URL == "" {
-			return nil, fmt.Errorf("http sink requires a url")
-		}
-		return NewHTTPSink(cfg.URL, cfg.Headers), nil
-
 	case "stdout":
 		return NewStdoutSink(), nil
-
+	case "http":
+		if cfg.URL == "" {
+			return nil, errors.New("factory: http sink requires a url")
+		}
+		return NewHTTPSink(cfg)
 	case "file":
 		if cfg.Path == "" {
-			return nil, fmt.Errorf("file sink requires a path")
+			return nil, errors.New("factory: file sink requires a path")
 		}
-		sink, err := NewFileSink(cfg.Path)
+		return NewFileSink(cfg.Path)
+	case "buffered":
+		if cfg.Inner == nil {
+			return nil, errors.New("factory: buffered sink requires an inner sink config")
+		}
+		cap := cfg.Capacity
+		if cap <= 0 {
+			cap = 512
+		}
+		inner, err := FromConfig(*cfg.Inner)
 		if err != nil {
-			return nil, fmt.Errorf("file sink: %w", err)
+			return nil, fmt.Errorf("factory: buffered inner: %w", err)
 		}
-		return sink, nil
-
+		return NewBufferedSink(inner, cap)
 	default:
-		return nil, fmt.Errorf("unknown sink type %q", cfg.Type)
+		return nil, fmt.Errorf("factory: unknown sink type %q", cfg.Type)
 	}
 }
 
-// FromConfigs constructs multiple Sinks from a slice of sink configurations.
-func FromConfigs(cfgs []config.SinkConfig) ([]Sink, error) {
-	sinks := make([]Sink, 0, len(cfgs))
-	for i, cfg := range cfgs {
-		s, err := FromConfig(cfg)
+// FromConfigs constructs multiple sinks from a slice of SinkConfig.
+func FromConfigs(cfgs []config.SinkConfig) ([]interface{ Write(e interface{ GetFields() map[string]any }) error }, error) {
+	out := make([]interface{ Write(e interface{ GetFields() map[string]any }) error }, 0, len(cfgs))
+	for _, c := range cfgs {
+		s, err := FromConfig(c)
 		if err != nil {
-			return nil, fmt.Errorf("sink[%d]: %w", i, err)
+			return nil, err
 		}
-		sinks = append(sinks, s)
+		out = append(out, s)
 	}
-	return sinks, nil
+	return out, nil
 }
