@@ -68,3 +68,14 @@ func (r *Redactor) Apply(entry parser.Entry) parser.Entry {
 	}
 	return out
 }
+
+// ApplyAll applies the redactor to each entry in the provided slice,
+// returning a new slice of redacted entries. The original slice and
+// its entries are never mutated.
+func (r *Redactor) ApplyAll(entries []parser.Entry) []parser.Entry {
+	out := make([]parser.Entry, len(entries))
+	for i, e := range entries {
+		out[i] = r.Apply(e)
+	}
+	return out
+}
