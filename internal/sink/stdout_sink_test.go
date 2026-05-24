@@ -72,3 +72,31 @@ func TestStdoutSink_Write_MultipleEntries(t *testing.T) {
 		t.Errorf("expected 3 lines, got %d", len(lines))
 	}
 }
+
+func TestStdoutSink_Write_PreservesFields(t *testing.T) {
+	var buf bytes.Buffer
+	s := NewStdoutSinkWithWriter(&buf)
+
+	entry := parser.Entry{
+		Timestamp: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		Level:     "debug",
+		Message:   "request handled",
+		Fields:    map[string]interface{}{"method": "GET", "status": float64(200)},
+	}
+
+	if err := s.Write(entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got parser.Entry
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+
+	if got.Fields["method"] != "GET" {
+		t.Errorf("expected field method='GET', got %v", got.Fields["method"])
+	}
+	if got.Fields["status"] != float64(200) {
+		t.Errorf("expected field status=200, got %v", got.Fields["status"])
+	}
+}
