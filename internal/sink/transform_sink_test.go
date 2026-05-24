@@ -95,3 +95,25 @@ func TestTransformSink_Write_PropagatesInnerError(t *testing.T) {
 		t.Error("expected error from inner sink to propagate")
 	}
 }
+
+func TestTransformSink_Write_MultipleEntries(t *testing.T) {
+	t.Parallel()
+	tr := transform.New(transform.AddField("env", "prod"))
+	cap := &captureTransformSink{}
+	s, _ := sink.NewTransformSink(cap, tr)
+
+	for i := 0; i < 3; i++ {
+		if err := s.Write(makeTransformEntry()); err != nil {
+			t.Fatalf("Write %d returned unexpected error: %v", i, err)
+		}
+	}
+
+	if len(cap.wrote) != 3 {
+		t.Fatalf("expected 3 entries forwarded, got %d", len(cap.wrote))
+	}
+	for i, e := range cap.wrote {
+		if e["env"] != "prod" {
+			t.Errorf("entry %d: expected env=prod, got %v", i, e["env"])
+		}
+	}
+}
